@@ -1,10 +1,8 @@
 package app.josiah.jccardviewer
 
-import app.josiah.jccardviewer.models.CreditCardModel
+import app.josiah.jccreditcardviewer.models.CreditCardModel
 import app.josiah.jccardviewer.service.CreditCardService
-import kotlinx.coroutines.runBlocking
 import org.junit.Test
-import kotlinx.coroutines.delay
 
 class CreditCardServiceTest {
 
