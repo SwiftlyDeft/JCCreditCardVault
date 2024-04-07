@@ -1,13 +1,13 @@
 package app.josiah.jccreditcardviewer
 
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -16,40 +16,41 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import app.josiah.jccreditcardviewer.models.CreditCardModel
 import app.josiah.jccardviewer.service.CreditCardService
+import app.josiah.jccreditcardviewer.ui.CreditCardList
 import app.josiah.jccreditcardviewer.ui.CreditCardView
 import app.josiah.jccreditcardviewer.ui.theme.JCCreditCardViewerTheme
-import androidx.compose.runtime.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             JCCreditCardViewerTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
                 ) {
-                    val isPermissionGranted = RequestInternetPermission()
-                    // Call RefreshCreditCardsFromAPI to fetch credit card data
+                    val isPermissionGranted = requestInternetPermission()
                     if (isPermissionGranted) {
                         RefreshCreditCardsFromAPI()
                     } else {
@@ -63,40 +64,39 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun RefreshCreditCardsFromAPI() {
-    println("Refresh Credit Cards From API")
     val creditCardsState = remember { mutableStateOf<List<CreditCardModel>>(emptyList()) }
     val loadingState = remember { mutableStateOf(true) }
 
-    val service = CreditCardService()
-
-    println("Coroutine start...")
-    service.fetchCreditCards(
-        onSuccess = { creditCards ->
-            println("On success")
-            creditCardsState.value = creditCards
-            loadingState.value = false
-        },
-        onFailure = { error ->
-            println("Error occurred: $error")
-            // Update loading state to false in case of failure
-            loadingState.value = false
+    LaunchedEffect(Unit) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val service = CreditCardService()
+            try {
+                val (creditCards, error) = CreditCardService().fetchCreditCards()
+                if (creditCards != null) {
+                    withContext(Dispatchers.Main) {
+                        creditCardsState.value = creditCards
+                        loadingState.value = false
+                    }
+                } else {
+                    // Handle error case
+                    println("Error: $error")
+                    loadingState.value = false
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    loadingState.value = false
+                }
+            }
         }
-    )
+    }
 
     if (loadingState.value) {
-        // Render the loading indicator if data is still being fetched
         Box(modifier = Modifier.fillMaxSize()) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
     } else {
-        // Render the credit card list if loading is complete
         CreditCardList(creditCardsState.value)
     }
-}
-
-@Composable
-fun LaunchedEffect(unit: Unit, content: Any) {
-
 }
 
 @Preview(showBackground = true)
@@ -104,40 +104,6 @@ fun LaunchedEffect(unit: Unit, content: Any) {
 fun GreetingPreview() {
     JCCreditCardViewerTheme {
         PreviewCreditCardList()
-    }
-}
-
-@Composable
-fun CreditCardItem(
-    cardNumber: String,
-    cardExpDate: String,
-    cardType: String
-) {
-    // Determine the image based on the card type
-    var image = R.drawable.card_logo_unknown
-    if (cardType == "mastercard") {
-        image = R.drawable.mastercardsimple
-    } else if (cardType == "solo") {
-        image = R.drawable.solo
-    }
-    CreditCardView(
-        cardNumber = cardNumber,
-        cardExpDate = cardExpDate,
-        cardType = cardType,
-        cardImageResource = image
-    )
-}
-
-@Composable
-fun CreditCardList(cards: List<CreditCardModel>) {
-    LazyColumn(modifier = Modifier.fillMaxHeight().background(color = androidx.compose.ui.graphics.Color.Transparent)) {
-        items(cards) { card ->
-            CreditCardItem(
-                cardNumber = card.getDisplayNumber(),
-                cardExpDate = card.creditCardExpiryDate,
-                cardType = card.creditCardType
-            )
-        }
     }
 }
 
@@ -156,14 +122,13 @@ fun PreviewCreditCardList() {
 Ask for internet permission
  */
 @Composable
-fun RequestInternetPermission(): Boolean {
+fun requestInternetPermission(): Boolean {
     val context = LocalContext.current
     var isPermissionGranted by remember { mutableStateOf(false) }
 
     // Check if permission is already granted
     if (ContextCompat.checkSelfPermission(
-            context,
-            android.Manifest.permission.INTERNET
+            context, android.Manifest.permission.INTERNET
         ) == PackageManager.PERMISSION_GRANTED
     ) {
         isPermissionGranted = true
@@ -182,10 +147,14 @@ fun RequestInternetPermission(): Boolean {
     }
 
     if (!isPermissionGranted) {
-        Column {
+        Column(
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Button(onClick = {
                 requestPermissionLauncher.launch(android.Manifest.permission.INTERNET)
-            }) {
+            }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                 Text("Allow Internet Permission")
             }
         }
